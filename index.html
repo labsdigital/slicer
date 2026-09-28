@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SLICER — Pembagi Gambar Seragam</title>
+<meta name="description" content="Potong gambar menjadi bagian-bagian seragam berdasarkan jumlah baris dan kolom. Berjalan 100% lokal di browser.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23FF4D00'/%3E%3Cline x1='8' y1='24' x2='24' y2='8' stroke='%23FAF8F1' stroke-width='3' stroke-dasharray='4 3'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site-head reveal">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 36 36" width="36" height="36"><line x1="9" y1="27" x2="27" y2="9" stroke="#FAF8F1" stroke-width="2.5" stroke-dasharray="5 4"/></svg>
+    </span>
+    <div>
+      <div class="brand-name">SLICER<em>.</em></div>
+      <div class="brand-tag">Pembagi gambar · baris × kolom</div>
+    </div>
+  </div>
+  <div class="head-note"><span class="live-dot" aria-hidden="true"></span><span class="txt">100% lokal — gambar tidak diunggah</span></div>
+</header>
+
+<main class="app">
+  <aside class="panel reveal">
+
+    <!-- 01 · Sumber gambar -->
+    <section class="card">
+      <h2 class="sec-label"><span class="idx">01</span>Sumber gambar</h2>
+
+      <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Unggah gambar: klik atau seret file ke sini">
+        <span class="dz-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+        </span>
+        <span class="dz-text">
+          <strong>Klik atau seret gambar ke sini</strong>
+          <small>PNG · JPG · WEBP · GIF — atau tempel Ctrl+V</small>
+        </span>
+      </div>
+      <input type="file" id="file-input" accept="image/*" hidden>
+
+      <div class="file-chip" id="file-chip" hidden>
+        <img id="chip-thumb" alt="Thumbnail gambar sumber">
+        <span class="chip-meta">
+          <strong id="chip-name">—</strong>
+          <small id="chip-dims">—</small>
+        </span>
+      </div>
+
+      <button class="btn btn-ghost btn-sm sample-btn" id="sample-btn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        Coba gambar contoh
+      </button>
+    </section>
+
+    <!-- 02 · Pengaturan potongan -->
+    <section class="card is-disabled" id="controls">
+      <h2 class="sec-label"><span class="idx">02</span>Pengaturan potongan</h2>
+
+      <div class="ctl-group">
+        <div class="ctl-head">
+          <span class="ctl-name">Baris</span>
+          <span class="ctl-sub">potongan ke bawah</span>
+        </div>
+        <div class="stepper">
+          <button type="button" id="rows-minus" aria-label="Kurangi jumlah baris">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <input type="number" id="rows-num" min="1" max="10" step="1" value="3" aria-label="Jumlah baris">
+          <button type="button" id="rows-plus" aria-label="Tambah jumlah baris">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+        <input type="range" id="rows-range" min="1" max="10" step="1" value="3" aria-label="Geser jumlah baris">
+      </div>
+
+      <div class="ctl-group">
+        <div class="ctl-head">
+          <span class="ctl-name">Kolom</span>
+          <span class="ctl-sub">potongan ke samping</span>
+        </div>
+        <div class="stepper">
+          <button type="button" id="cols-minus" aria-label="Kurangi jumlah kolom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <input type="number" id="cols-num" min="1" max="10" step="1" value="3" aria-label="Jumlah kolom">
+          <button type="button" id="cols-plus" aria-label="Tambah jumlah kolom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+        <input type="range" id="cols-range" min="1" max="10" step="1" value="3" aria-label="Geser jumlah kolom">
+      </div>
+
+      <dl class="readout">
+        <div class="ro-row"><dt>Sumber</dt><dd id="ro-src">—</dd></div>
+        <div class="ro-row"><dt>Ukuran potongan</dt><dd id="ro-slice">—</dd></div>
+        <div class="ro-row"><dt>Sisa tak terpakai</dt><dd id="ro-crop">—</dd></div>
+        <div class="ro-row"><dt>Total potongan</dt><dd id="ro-count">—</dd></div>
+      </dl>
+
+      <div class="panel-foot">
+        <small>Perubahan baris/kolom langsung memperbarui potongan.</small>
+        <button class="btn btn-ghost btn-sm" id="reset-btn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Atur ulang
+        </button>
+      </div>
+    </section>
+
+  </aside>
+
+  <!-- ============ PANGGUNG KANAN ============ -->
+  <section class="stage reveal">
+
+    <!-- Pratinjau -->
+    <div class="card card-dark">
+      <span class="mark tl" aria-hidden="true"></span>
+      <span class="mark tr" aria-hidden="true"></span>
+      <span class="mark bl" aria-hidden="true"></span>
+      <span class="mark br" aria-hidden="true"></span>
+
+      <div class="stage-head">
+        <span class="chip-label">Pratinjau</span>
+        <span class="stage-note" id="cap-grid">— × —</span>
+      </div>
+
+      <div class="preview-empty" id="preview-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <p><strong>Belum ada gambar</strong><small>muat gambar untuk melihat area potong</small></p>
+      </div>
+
+      <div class="frame" id="frame" hidden>
+        <img id="preview-img" alt="Pratinjau gambar">
+        <div class="overlay" id="overlay" aria-hidden="true"></div>
+      </div>
+
+      <div class="stage-caption">
+        <span>garis putus-putus = area potong</span>
+        <span id="cap-dims">—</span>
+      </div>
+    </div>
+
+    <!-- 03 · Hasil -->
+    <div class="card results-card">
+      <div class="results-head">
+        <h2 class="sec-label"><span class="idx">03</span>Hasil potongan</h2>
+        <div class="results-actions">
+          <span class="res-meta" id="res-meta">—</span>
+          <button class="btn btn-accent" id="dl-all" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span id="dl-all-label">Unduh semua</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="results-empty" id="results-empty">
+        <p>Potongan beserta tombol unduh masing-masing akan muncul di sini.</p>
+      </div>
+
+      <div class="results-grid" id="results-grid" hidden></div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-foot reveal">
+  <span>SLICER — alat potong gambar baris × kolom</span>
+  <span>Semua proses berjalan lokal di browser · tanpa server</span>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
+
+
+
