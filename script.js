@@ -18,6 +18,7 @@ const els = {
   resultsEmpty: $('results-empty'), resultsGrid: $('results-grid'),
   resMeta: $('res-meta'), dlAll: $('dl-all'), dlAllLabel: $('dl-all-label'),
   resetBtn: $('reset-btn'), toast: $('toast'),
+  slicerEqual: $('slicer-equal'), slicerFree: $('slicer-free'),
 };
 
 const MIN = 1;
@@ -27,12 +28,17 @@ const DOWNLOAD_GAP = 320;    // jeda antar unduhan massal
 
 const state = {
   img: null,
-  objectUrl: null,   // URL pratinjau yang sedang dipakai
+  objectUrl: null,
   baseName: 'gambar',
   rows: 3,
   cols: 3,
-  slices: [],        // { url, r, c, w, h, filename }
+  slices: [],
   sliceTimer: null,
+  // --- free-form slicer ---
+  slicerMode: 'equal',   // 'equal' | 'free'
+  freeLines: { v: [], h: [] }, // pixel offsets from left/top edge
+  // --- drag state ---
+  drag: null,            // { type, index, startPos, startVal }
 };
 
 /* ---------- util ---------- */
@@ -61,7 +67,32 @@ function baseNameFrom(name) {
 function sliceMetrics() {
   const iw = state.img.naturalWidth;
   const ih = state.img.naturalHeight;
-  const sw = Math.max(1, Math.floor(iw / state.cols)); // potongan seragam, sisa dipangkas
+
+  if (state.slicerMode === 'free') {
+    const vLines = [...state.freeLines.v].sort((a, b) => a - b);
+    const hLines = [...state.freeLines.h].sort((a, b) => a - b);
+    const xBorders = [0, ...vLines, iw];
+    const yBorders = [0, ...hLines, ih];
+    const cols = xBorders.length - 1;
+    const rows = yBorders.length - 1;
+    const swArr = [];
+    const shArr = [];
+    for (let c = 0; c < cols; c++) swArr.push(xBorders[c + 1] - xBorders[c]);
+    for (let r = 0; r < rows; r++) shArr.push(yBorders[r + 1] - yBorders[r]);
+    const totalSw = swArr.reduce((a, b) => a + b, 0);
+    const totalSh = shArr.reduce((a, b) => a + b, 0);
+    const tooSmall = swArr.some((v) => v < 1) || shArr.some((v) => v < 1);
+    return {
+      iw, ih,
+      swArr, shArr,
+      cols, rows,
+      remX: 0, remY: 0,
+      tooSmall,
+      totalSw, totalSh,
+    };
+  }
+
+  const sw = Math.max(1, Math.floor(iw / state.cols));
   const sh = Math.max(1, Math.floor(ih / state.rows));
   return {
     iw, ih, sw, sh,
@@ -80,6 +111,7 @@ function setImage(img, displayName, baseName, url) {
   state.img = img;
   state.baseName = baseName;
   state.objectUrl = url;
+  initFreeLines();
 
   els.previewImg.src = url;
   els.previewEmpty.hidden = true;
@@ -129,7 +161,9 @@ function updateReadout() {
   els.roCrop.textContent = m.tooSmall
     ? 'grid melebihi gambar'
     : (m.remX || m.remY ? `${m.remX} × ${m.remY} px` : 'pas — 0 px');
-  els.roCount.textContent = `${state.rows * state.cols} buah`;
+  const cols = state.slicerMode === 'free' ? m.cols : state.cols;
+  const rows = state.slicerMode === 'free' ? m.rows : state.rows;
+  els.roCount.textContent = `${cols * rows} buah`;
   els.capDims.textContent = `${m.iw} × ${m.ih} px`;
 }
 
@@ -140,12 +174,44 @@ function renderOverlay() {
 
   const m = sliceMetrics();
   const frag = document.createDocumentFragment();
-  const mk = (cls, style) => {
+  const mk = (cls, style, dataAttrs) => {
     const d = document.createElement('span');
     d.className = cls;
     Object.assign(d.style, style);
+    if (dataAttrs) {
+      for (const [k, v] of Object.entries(dataAttrs)) {
+        d.dataset[k] = v;
+      }
+    }
     frag.appendChild(d);
+    return d;
   };
+
+  if (state.slicerMode === 'free') {
+    const vLines = [...state.freeLines.v].sort((a, b) => a - b);
+    const hLines = [...state.freeLines.h].sort((a, b) => a - b);
+
+    for (let i = 0; i < vLines.length; i++) {
+      const line = mk('slicer-line line-v', {
+        left: ((vLines[i] / m.iw) * 100) + '%',
+      }, { type: 'v', index: i });
+      const handle = document.createElement('span');
+      handle.className = 'slicer-handle';
+      line.appendChild(handle);
+    }
+    for (let i = 0; i < hLines.length; i++) {
+      const line = mk('slicer-line line-h', {
+        top: ((hLines[i] / m.ih) * 100) + '%',
+      }, { type: 'h', index: i });
+      const handle = document.createElement('span');
+      handle.className = 'slicer-handle';
+      line.appendChild(handle);
+    }
+
+    els.overlay.appendChild(frag);
+    bindSlicerDrag();
+    return;
+  }
 
   for (let k = 1; k < state.cols; k++) mk('line-v', { left: ((k * m.sw / m.iw) * 100) + '%' });
   for (let k = 1; k < state.rows; k++) mk('line-h', { top: ((k * m.sh / m.ih) * 100) + '%' });
@@ -157,6 +223,75 @@ function renderOverlay() {
     }
   }
   els.overlay.appendChild(frag);
+}
+
+/* ---------- free-form slicer drag ---------- */
+
+function bindSlicerDrag() {
+  const lines = els.overlay.querySelectorAll('.slicer-line');
+  lines.forEach((line) => {
+    const onDown = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const type = line.dataset.type;
+      const index = parseInt(line.dataset.index, 10);
+      state.drag = { type, index };
+
+      line.classList.add('dragging');
+      const handle = line.querySelector('.slicer-handle');
+      if (handle) handle.classList.add('dragging');
+
+      const onMove = (ev) => {
+        if (!state.drag) return;
+        const rect = els.overlay.getBoundingClientRect();
+        const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+        const clientY = ev.touches ? ev.touches[0].clientY : ev.clientY;
+        const x = Math.max(2, Math.min(state.img.naturalWidth - 2, ((clientX - rect.left) / rect.width) * state.img.naturalWidth));
+        const y = Math.max(2, Math.min(state.img.naturalHeight - 2, ((clientY - rect.top) / rect.height) * state.img.naturalHeight));
+
+        if (state.drag.type === 'v') {
+          state.freeLines.v[state.drag.index] = x;
+          line.style.left = ((x / state.img.naturalWidth) * 100) + '%';
+        } else {
+          state.freeLines.h[state.drag.index] = y;
+          line.style.top = ((y / state.img.naturalHeight) * 100) + '%';
+        }
+      };
+
+      const onUp = () => {
+        if (state.drag) {
+          line.classList.remove('dragging');
+          const handle = line.querySelector('.slicer-handle');
+          if (handle) handle.classList.remove('dragging');
+          state.drag = null;
+          updateReadout();
+          scheduleSlice();
+        }
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        window.removeEventListener('touchmove', onMove);
+        window.removeEventListener('touchend', onUp);
+      };
+
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+      window.addEventListener('touchmove', onMove, { passive: false });
+      window.addEventListener('touchend', onUp);
+    };
+
+    line.addEventListener('mousedown', onDown);
+    line.addEventListener('touchstart', onDown, { passive: false });
+  });
+}
+
+function initFreeLines() {
+  state.freeLines = { v: [], h: [] };
+  for (let k = 1; k < state.cols; k++) {
+    state.freeLines.v.push(Math.round((k / state.cols) * state.img.naturalWidth));
+  }
+  for (let k = 1; k < state.rows; k++) {
+    state.freeLines.h.push(Math.round((k / state.rows) * state.img.naturalHeight));
+  }
 }
 
 /* ---------- gambar contoh ---------- */
@@ -237,8 +372,11 @@ async function sliceNow() {
   clearTimeout(state.sliceTimer);
 
   clearSlices(false);
-  const { img, rows, cols } = state;
+  const { img } = state;
   const m = sliceMetrics();
+
+  const cols = m.cols;
+  const rows = m.rows;
 
   els.resultsEmpty.hidden = true;
   els.resultsGrid.hidden = false;
@@ -247,13 +385,34 @@ async function sliceNow() {
 
   try {
     const jobs = [];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const cv = document.createElement('canvas');
-        cv.width = m.sw;
-        cv.height = m.sh;
-        cv.getContext('2d').drawImage(img, c * m.sw, r * m.sh, m.sw, m.sh, 0, 0, m.sw, m.sh);
-        jobs.push({ r, c, cv });
+
+    if (state.slicerMode === 'free') {
+      const xBorders = [0, ...state.freeLines.v.sort((a, b) => a - b), state.img.naturalWidth];
+      const yBorders = [0, ...state.freeLines.h.sort((a, b) => a - b), state.img.naturalHeight];
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const x = xBorders[c];
+          const y = yBorders[r];
+          const sw = xBorders[c + 1] - x;
+          const sh = yBorders[r + 1] - y;
+          if (sw < 1 || sh < 1) continue;
+          const cv = document.createElement('canvas');
+          cv.width = sw;
+          cv.height = sh;
+          cv.getContext('2d').drawImage(img, x, y, sw, sh, 0, 0, sw, sh);
+          jobs.push({ r, c, cv, sw, sh });
+        }
+      }
+    } else {
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const cv = document.createElement('canvas');
+          cv.width = m.sw;
+          cv.height = m.sh;
+          cv.getContext('2d').drawImage(img, c * m.sw, r * m.sh, m.sw, m.sh, 0, 0, m.sw, m.sh);
+          jobs.push({ r, c, cv, sw: m.sw, sh: m.sh });
+        }
       }
     }
 
@@ -261,17 +420,20 @@ async function sliceNow() {
     const grid = els.resultsGrid;
 
     blobs.forEach((blob, i) => {
-      const { r, c } = jobs[i];
+      const { r, c, sw, sh } = jobs[i];
       const rec = {
         url: URL.createObjectURL(blob),
-        r, c, w: m.sw, h: m.sh,
+        r, c, w: sw, h: sh,
         filename: `${state.baseName}_r${r + 1}c${c + 1}.png`,
       };
       state.slices.push(rec);
       grid.appendChild(cardFor(rec, i));
     });
 
-    els.resMeta.textContent = `${rows * cols} potongan · ${m.sw} × ${m.sh} px`;
+    const meta = state.slicerMode === 'free'
+      ? `${rows * cols} potongan · ${m.totalSw} × ${m.totalSh} px`
+      : `${rows * cols} potongan · ${m.sw} × ${m.sh} px`;
+    els.resMeta.textContent = meta;
     els.dlAll.disabled = false;
     els.dlAllLabel.textContent = `Unduh semua (${rows * cols})`;
   } catch (err) {
@@ -341,13 +503,16 @@ async function downloadAll() {
 
 function setCount(axis, v) {
   v = Math.round(Number(v));
-  if (!Number.isFinite(v)) return; // input sedang kosong / tidak valid
+  if (!Number.isFinite(v)) return;
   v = Math.min(MAX, Math.max(MIN, v));
   state[axis] = v;
   const num = axis === 'rows' ? els.rowsNum : els.colsNum;
   const range = axis === 'rows' ? els.rowsRange : els.colsRange;
   num.value = String(v);
   range.value = String(v);
+  if (state.slicerMode === 'free' && state.img) {
+    initFreeLines();
+  }
   updateReadout();
   renderOverlay();
   scheduleSlice();
@@ -372,6 +537,8 @@ function resetAll() {
   state.img = null;
   state.objectUrl = null;
   state.baseName = 'gambar';
+  state.slicerMode = 'equal';
+  state.freeLines = { v: [], h: [] };
   els.previewImg.removeAttribute('src');
   els.chipThumb.removeAttribute('src');
   els.frame.hidden = true;
@@ -380,6 +547,8 @@ function resetAll() {
   els.controls.classList.add('is-disabled');
   els.resMeta.textContent = '—';
   els.fileInput.value = '';
+  els.slicerEqual.classList.add('active');
+  els.slicerFree.classList.remove('active');
   setCount('rows', 3);
   setCount('cols', 3);
   toast('Diatur ulang — muat gambar baru.');
@@ -426,6 +595,30 @@ function bindEvents() {
   // unduh semua & reset
   els.dlAll.addEventListener('click', downloadAll);
   els.resetBtn.addEventListener('click', resetAll);
+
+  // slicer mode toggle
+  els.slicerEqual.addEventListener('click', () => {
+    if (state.slicerMode === 'equal') return;
+    state.slicerMode = 'equal';
+    els.slicerEqual.classList.add('active');
+    els.slicerFree.classList.remove('active');
+    initFreeLines();
+    updateReadout();
+    renderOverlay();
+    scheduleSlice();
+  });
+  els.slicerFree.addEventListener('click', () => {
+    if (state.slicerMode === 'free') return;
+    state.slicerMode = 'free';
+    els.slicerFree.classList.add('active');
+    els.slicerEqual.classList.remove('active');
+    if (state.img) {
+      initFreeLines();
+      updateReadout();
+      renderOverlay();
+      scheduleSlice();
+    }
+  });
 }
 
 /* ---------- inisialisasi ---------- */

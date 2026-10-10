@@ -126,8 +126,12 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;background:var(--acce
 .ro-row dt{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .ro-row dd{font-family:var(--font-mono);font-size:12px;font-weight:600;text-align:right;white-space:nowrap}
 .ro-row dd.warn{color:var(--err)}
-.panel-foot{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.panel-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .panel-foot small{font-family:var(--font-mono);font-size:9px;letter-spacing:.04em;color:var(--muted);max-width:180px;line-height:1.6}
+.slicer-mode-row{display:flex;gap:6px}
+.slicer-mode-btn{font-size:10px!important;padding:7px 10px!important}
+.slicer-mode-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.slicer-mode-btn svg{width:12px!important;height:12px!important}
 
 /* ---------- kartu gelap pratinjau ---------- */
 .card-dark{position:relative;background:var(--dark);border-color:var(--dark);color:var(--paper-2);padding:26px 26px 20px;overflow:hidden;text-align:center}
@@ -152,6 +156,18 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;background:var(--acce
 .overlay .rem-x{top:0;bottom:0;right:0;border-left:2px dashed var(--accent)}
 .overlay .rem-y{left:0;right:0;bottom:0;border-top:2px dashed var(--accent)}
 .overlay .node{position:absolute;z-index:3;width:7px;height:7px;background:var(--accent);transform:translate(-50%,-50%) rotate(45deg);box-shadow:0 0 0 1.5px rgba(23,20,16,.4)}
+.overlay .slicer-line{position:absolute;z-index:4;background:rgba(255,77,0,.88);cursor:ew-resize;user-select:none;-webkit-user-select:none}
+.overlay .slicer-line.line-v{top:0;bottom:0;width:2px;transform:translateX(-50%)}
+.overlay .slicer-line.line-h{left:0;right:0;height:2px;transform:translateY(-50%)}
+.overlay .slicer-line::before{content:"";position:absolute;background:rgba(255,77,0,.12);transition:all .15s}
+.overlay .slicer-line.line-v::before{top:0;bottom:0;width:12px;left:50%;transform:translateX(-50%)}
+.overlay .slicer-line.line-h::before{left:0;right:0;height:12px;top:50%;transform:translateY(-50%)}
+.overlay .slicer-line:hover,.overlay .slicer-line.dragging{background:rgba(255,77,0,1)}
+.overlay .slicer-line:hover::before,.overlay .slicer-line.dragging::before{background:rgba(255,77,0,.22)}
+.overlay .slicer-handle{position:absolute;z-index:5;width:16px;height:16px;background:var(--accent);border:2px solid var(--dark);border-radius:50%;cursor:move;box-shadow:2px 2px 0 rgba(23,20,16,.4);transition:transform .15s,background .15s}
+.overlay .slicer-line.line-v .slicer-handle{top:50%;left:50%;transform:translate(-50%,-50%)}
+.overlay .slicer-line.line-h .slicer-handle{top:50%;left:50%;transform:translate(-50%,-50%)}
+.overlay .slicer-handle:hover,.overlay .slicer-handle.dragging{transform:translate(-50%,-50%) scale(1.3);background:#ff6a1a}
 .stage-caption{display:flex;justify-content:space-between;gap:12px;margin-top:18px;padding-top:12px;border-top:1px solid rgba(250,248,241,.12);font-family:var(--font-mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(250,248,241,.45)}
 
 /* ---------- hasil potongan ---------- */
