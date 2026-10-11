@@ -19,6 +19,7 @@ const els = {
   resMeta: $('res-meta'), dlAll: $('dl-all'), dlAllLabel: $('dl-all-label'),
   resetBtn: $('reset-btn'), toast: $('toast'),
   slicerEqual: $('slicer-equal'), slicerFree: $('slicer-free'),
+  sliceBtn: $('slice-btn'),
 };
 
 const MIN = 1;
@@ -69,16 +70,22 @@ function sliceMetrics() {
   const ih = state.img.naturalHeight;
 
   if (state.slicerMode === 'free') {
-    const vLines = [...state.freeLines.v].sort((a, b) => a - b);
-    const hLines = [...state.freeLines.h].sort((a, b) => a - b);
+    const vLines = [...state.freeLines.v].filter((v) => isFinite(v) && v > 0 && v < iw).sort((a, b) => a - b);
+    const hLines = [...state.freeLines.h].filter((v) => isFinite(v) && v > 0 && v < ih).sort((a, b) => a - b);
     const xBorders = [0, ...vLines, iw];
     const yBorders = [0, ...hLines, ih];
-    const cols = xBorders.length - 1;
-    const rows = yBorders.length - 1;
+    const cols = Math.max(1, xBorders.length - 1);
+    const rows = Math.max(1, yBorders.length - 1);
     const swArr = [];
     const shArr = [];
-    for (let c = 0; c < cols; c++) swArr.push(xBorders[c + 1] - xBorders[c]);
-    for (let r = 0; r < rows; r++) shArr.push(yBorders[r + 1] - yBorders[r]);
+    for (let c = 0; c < cols; c++) {
+      const w = (xBorders[c + 1] || iw) - (xBorders[c] || 0);
+      swArr.push(w);
+    }
+    for (let r = 0; r < rows; r++) {
+      const h = (yBorders[r + 1] || ih) - (yBorders[r] || 0);
+      shArr.push(h);
+    }
     const totalSw = swArr.reduce((a, b) => a + b, 0);
     const totalSh = shArr.reduce((a, b) => a + b, 0);
     const tooSmall = swArr.some((v) => v < 1) || shArr.some((v) => v < 1);
@@ -96,6 +103,8 @@ function sliceMetrics() {
   const sh = Math.max(1, Math.floor(ih / state.rows));
   return {
     iw, ih, sw, sh,
+    cols: state.cols,
+    rows: state.rows,
     remX: iw - sw * state.cols,
     remY: ih - sh * state.rows,
     tooSmall: iw < state.cols || ih < state.rows,
@@ -125,7 +134,6 @@ function setImage(img, displayName, baseName, url) {
 
   updateReadout();
   renderOverlay();
-  scheduleSlice();
   toast(`Gambar dimuat — ${img.naturalWidth} × ${img.naturalHeight} px`);
 }
 
@@ -156,14 +164,14 @@ function updateReadout() {
   }
   const m = sliceMetrics();
   els.roSrc.textContent = `${m.iw} × ${m.ih} px`;
-  els.roSlice.textContent = `${m.sw} × ${m.sh} px`;
+  els.roSlice.textContent = m.swArr
+    ? `${m.totalSw} × ${m.totalSh} px (total)`
+    : `${m.sw} × ${m.sh} px`;
   els.roSlice.classList.toggle('warn', m.tooSmall);
   els.roCrop.textContent = m.tooSmall
     ? 'grid melebihi gambar'
     : (m.remX || m.remY ? `${m.remX} × ${m.remY} px` : 'pas — 0 px');
-  const cols = state.slicerMode === 'free' ? m.cols : state.cols;
-  const rows = state.slicerMode === 'free' ? m.rows : state.rows;
-  els.roCount.textContent = `${cols * rows} buah`;
+  els.roCount.textContent = `${m.cols * m.rows} buah`;
   els.capDims.textContent = `${m.iw} × ${m.ih} px`;
 }
 
@@ -188,20 +196,26 @@ function renderOverlay() {
   };
 
   if (state.slicerMode === 'free') {
-    const vLines = [...state.freeLines.v].sort((a, b) => a - b);
-    const hLines = [...state.freeLines.h].sort((a, b) => a - b);
+    // Tulis kembali ke state (terurut + tervalidasi) supaya index garis di DOM
+    // selalu sejajar dengan index array state — drag menulis ke slot yang benar.
+    state.freeLines.v = state.freeLines.v.filter((v) => isFinite(v) && v > 0 && v < m.iw).sort((a, b) => a - b);
+    state.freeLines.h = state.freeLines.h.filter((v) => isFinite(v) && v > 0 && v < m.ih).sort((a, b) => a - b);
+    const vLines = state.freeLines.v;
+    const hLines = state.freeLines.h;
 
     for (let i = 0; i < vLines.length; i++) {
+      const pct = isFinite(vLines[i]) ? ((vLines[i] / m.iw) * 100) : 0;
       const line = mk('slicer-line line-v', {
-        left: ((vLines[i] / m.iw) * 100) + '%',
+        left: pct + '%',
       }, { type: 'v', index: i });
       const handle = document.createElement('span');
       handle.className = 'slicer-handle';
       line.appendChild(handle);
     }
     for (let i = 0; i < hLines.length; i++) {
+      const pct = isFinite(hLines[i]) ? ((hLines[i] / m.ih) * 100) : 0;
       const line = mk('slicer-line line-h', {
-        top: ((hLines[i] / m.ih) * 100) + '%',
+        top: pct + '%',
       }, { type: 'h', index: i });
       const handle = document.createElement('span');
       handle.className = 'slicer-handle';
@@ -246,14 +260,27 @@ function bindSlicerDrag() {
         const rect = els.overlay.getBoundingClientRect();
         const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
         const clientY = ev.touches ? ev.touches[0].clientY : ev.clientY;
-        const x = Math.max(2, Math.min(state.img.naturalWidth - 2, ((clientX - rect.left) / rect.width) * state.img.naturalWidth));
-        const y = Math.max(2, Math.min(state.img.naturalHeight - 2, ((clientY - rect.top) / rect.height) * state.img.naturalHeight));
+        const rawX = ((clientX - rect.left) / rect.width) * state.img.naturalWidth;
+        const rawY = ((clientY - rect.top) / rect.height) * state.img.naturalHeight;
 
+        // Kunci garis tetap berurutan: batasi antara garis tetangga
+        // (jeda minimal 1px) supaya potongan tidak pernah berukuran 0/negatif
+        // dan index garis di DOM tetap sejajar dengan array state.
         if (state.drag.type === 'v') {
-          state.freeLines.v[state.drag.index] = x;
+          const arr = state.freeLines.v;
+          const i = state.drag.index;
+          const lo = i > 0 ? arr[i - 1] + 1 : 2;
+          const hi = i < arr.length - 1 ? arr[i + 1] - 1 : state.img.naturalWidth - 2;
+          const x = Math.max(lo, Math.min(hi, rawX));
+          arr[i] = x;
           line.style.left = ((x / state.img.naturalWidth) * 100) + '%';
         } else {
-          state.freeLines.h[state.drag.index] = y;
+          const arr = state.freeLines.h;
+          const i = state.drag.index;
+          const lo = i > 0 ? arr[i - 1] + 1 : 2;
+          const hi = i < arr.length - 1 ? arr[i + 1] - 1 : state.img.naturalHeight - 2;
+          const y = Math.max(lo, Math.min(hi, rawY));
+          arr[i] = y;
           line.style.top = ((y / state.img.naturalHeight) * 100) + '%';
         }
       };
@@ -265,7 +292,7 @@ function bindSlicerDrag() {
           if (handle) handle.classList.remove('dragging');
           state.drag = null;
           updateReadout();
-          scheduleSlice();
+          hideSliceResults();
         }
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
@@ -362,9 +389,21 @@ function clearSlices(hideGrid = true) {
   if (hideGrid) {
     els.resultsGrid.hidden = true;
     els.resultsEmpty.hidden = false;
+    els.dlAll.classList.add('is-hidden');
+    els.sliceBtn.classList.remove('is-hidden');
   }
-  els.dlAll.disabled = true;
-  els.dlAllLabel.textContent = 'Unduh semua';
+  els.resMeta.textContent = '—';
+}
+
+function hideSliceResults() {
+  for (const s of state.slices) URL.revokeObjectURL(s.url);
+  state.slices = [];
+  els.resultsGrid.innerHTML = '';
+  els.resultsGrid.hidden = true;
+  els.resultsEmpty.hidden = false;
+  els.dlAll.classList.add('is-hidden');
+  els.sliceBtn.classList.remove('is-hidden');
+  els.resMeta.textContent = '—';
 }
 
 async function sliceNow() {
@@ -380,6 +419,8 @@ async function sliceNow() {
 
   els.resultsEmpty.hidden = true;
   els.resultsGrid.hidden = false;
+  els.sliceBtn.classList.add('is-hidden');
+  els.dlAll.classList.remove('is-hidden');
   els.resultsGrid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
   els.resMeta.textContent = 'memotong…';
 
@@ -440,7 +481,7 @@ async function sliceNow() {
     els.dlAllLabel.textContent = `Unduh semua (${rows * cols})`;
   } catch (err) {
     console.error(err);
-    clearSlices();
+    hideSliceResults();
     els.resMeta.textContent = 'gagal memotong';
     toast('Gagal memotong gambar.', true);
   }
@@ -521,7 +562,7 @@ function setCount(axis, v) {
   }
   updateReadout();
   renderOverlay();
-  scheduleSlice();
+  hideSliceResults();
 }
 
 function bindStepper(axis) {
@@ -611,7 +652,7 @@ function bindEvents() {
     initFreeLines();
     updateReadout();
     renderOverlay();
-    scheduleSlice();
+    hideSliceResults();
   });
   els.slicerFree.addEventListener('click', () => {
     if (state.slicerMode === 'free') return;
@@ -622,8 +663,18 @@ function bindEvents() {
       initFreeLines();
       updateReadout();
       renderOverlay();
-      scheduleSlice();
+      hideSliceResults();
     }
+  });
+
+  // potong manual
+  els.sliceBtn.addEventListener('click', () => {
+    if (!state.img) return;
+    // Jangan panggil initFreeLines() di sini — pada mode "Geser manual"
+    // itu akan mereset garis yang sudah digeser pengguna ke posisi seragam.
+    updateReadout();
+    renderOverlay();
+    sliceNow();
   });
 }
 

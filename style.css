@@ -92,6 +92,10 @@ button{font:inherit;color:inherit}
 .btn:active{transform:none;box-shadow:none}
 .btn[disabled]{opacity:.35;pointer-events:none}
 .btn-accent{background:var(--accent);color:#fff}
+.btn-slice{background:var(--ink);color:var(--paper-2)}
+.btn-slice:hover{background:var(--accent);border-color:var(--accent)}
+#slice-btn{visibility:visible}
+#slice-btn.is-hidden,#dl-all.is-hidden{display:none!important}
 .btn-ghost{background:transparent;border-color:var(--line);color:var(--muted)}
 .btn-ghost:hover{border-color:var(--ink);color:var(--ink);box-shadow:2px 2px 0 var(--line)}
 .btn-sm{padding:8px 12px;font-size:10px}
