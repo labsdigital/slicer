@@ -392,26 +392,28 @@ async function sliceNow() {
 
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
-          const x = xBorders[c];
-          const y = yBorders[r];
-          const sw = xBorders[c + 1] - x;
-          const sh = yBorders[r + 1] - y;
-          if (sw < 1 || sh < 1) continue;
+          const x = xBorders[c] || 0;
+          const y = yBorders[r] || 0;
+          const sw = (xBorders[c + 1] || state.img.naturalWidth) - x;
+          const sh = (yBorders[r + 1] || state.img.naturalHeight) - y;
+          if (sw < 1 || sh < 1 || !isFinite(sw) || !isFinite(sh)) continue;
           const cv = document.createElement('canvas');
-          cv.width = sw;
-          cv.height = sh;
-          cv.getContext('2d').drawImage(img, x, y, sw, sh, 0, 0, sw, sh);
-          jobs.push({ r, c, cv, sw, sh });
+          cv.width = Math.max(1, sw);
+          cv.height = Math.max(1, sh);
+          cv.getContext('2d').drawImage(img, x, y, sw, sh, 0, 0, cv.width, cv.height);
+          jobs.push({ r, c, cv, sw: cv.width, sh: cv.height });
         }
       }
     } else {
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
+          const sw = m.sw || 1;
+          const sh = m.sh || 1;
           const cv = document.createElement('canvas');
-          cv.width = m.sw;
-          cv.height = m.sh;
-          cv.getContext('2d').drawImage(img, c * m.sw, r * m.sh, m.sw, m.sh, 0, 0, m.sw, m.sh);
-          jobs.push({ r, c, cv, sw: m.sw, sh: m.sh });
+          cv.width = sw;
+          cv.height = sh;
+          cv.getContext('2d').drawImage(img, c * sw, r * sh, sw, sh, 0, 0, sw, sh);
+          jobs.push({ r, c, cv, sw, sh });
         }
       }
     }
@@ -451,7 +453,9 @@ function cardFor(rec, i) {
 
   const box = document.createElement('div');
   box.className = 'slice-img';
-  box.style.aspectRatio = `${rec.w} / ${rec.h}`;
+  const safeW = rec.w > 0 && isFinite(rec.w) ? rec.w : 1;
+  const safeH = rec.h > 0 && isFinite(rec.h) ? rec.h : 1;
+  box.style.aspectRatio = `${safeW} / ${safeH}`;
 
   const im = document.createElement('img');
   im.src = rec.url;
@@ -465,7 +469,9 @@ function cardFor(rec, i) {
   tag.textContent = `B${rec.r + 1}·K${rec.c + 1}`;
   const dim = document.createElement('span');
   dim.className = 'dim';
-  dim.textContent = `${rec.w} × ${rec.h}`;
+  const displayW = (rec.w > 0 && isFinite(rec.w)) ? rec.w : '?';
+  const displayH = (rec.h > 0 && isFinite(rec.h)) ? rec.h : '?';
+  dim.textContent = `${displayW} × ${displayH}`;
   const a = document.createElement('a');
   a.className = 'dl';
   a.href = rec.url;
